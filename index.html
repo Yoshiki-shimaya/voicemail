@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="apple-mobile-web-app-title" content="ボイスメール">
+<title>社内ボイスメール</title>
+<script>
+  /* ★★★ ここの2か所だけ、自分の環境のURLに書き換えてください ★★★ */
+  // 「API用」デプロイのURL（アクセスできるユーザー：全員）
+  //   ※ ログインなしで呼び出すため、「/a/macros/会社ドメイン/」を含まない形にしている
+  var API_URL   = 'https://script.google.com/macros/s/AKfycbyfW5DFuZo0obdBNv5O8TuMvVUTc-zOr1lHeLCMBEggkOWNB82uVlYHuH_Jc_OWigK6lg/exec';
+  // 「ログイン用」デプロイのURL（アクセスできるユーザー：会社のドメイン内の全員）
+  var LOGIN_URL = 'https://script.google.com/a/macros/shimayag.com/s/AKfycbxo5B8ExpIsytEytGz8C5kJmqnDpnvnbDoOsBox2wDbHhyhNjfcVvaErd37UYHck6aMWg/exec';
+</script>
+<style>
+  :root{
+    --bg:#f4f6fa; --card:#fff; --text:#1f2633; --sub:#6b7485; --line:#e2e6ee;
+    --main:#1a73e8; --main-soft:#e8f0fe; --rec:#e53935; --ok:#2e7d32; --warn:#f57c00;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Yu Gothic UI",sans-serif;
+    font-size:16px;-webkit-tap-highlight-color:transparent}
+  header{position:sticky;top:0;z-index:5;background:var(--main);color:#fff;padding:12px 16px;
+    display:flex;align-items:center;justify-content:space-between}
+  header h1{font-size:18px;margin:0}
+  header .me{font-size:13px;opacity:.9;background:none;border:0;color:#fff;text-decoration:underline;cursor:pointer}
+  nav{position:sticky;top:48px;z-index:4;display:flex;background:#fff;border-bottom:1px solid var(--line)}
+  nav button{flex:1;padding:12px 4px;border:0;background:none;font-size:15px;color:var(--sub);
+    border-bottom:3px solid transparent;cursor:pointer}
+  nav button.on{color:var(--main);border-bottom-color:var(--main);font-weight:bold}
+  .badge{display:inline-block;min-width:20px;padding:1px 6px;border-radius:10px;background:var(--rec);
+    color:#fff;font-size:12px;margin-left:4px}
+  main{max-width:640px;margin:0 auto;padding:12px 16px 80px}
+  .view{display:none}.view.on{display:block}
+  .card{background:var(--card);border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .card h2{font-size:15px;margin:0 0 10px;color:var(--sub)}
+  .item{background:var(--card);border-radius:12px;padding:12px 14px;margin-bottom:8px;
+    box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer}
+  .item .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+  .item .who{font-weight:bold}
+  .item.unread .who::before{content:"●";color:var(--rec);margin-right:6px;font-size:12px}
+  .item .meta{font-size:12px;color:var(--sub);white-space:nowrap}
+  .item .ttl{margin-top:4px;color:var(--text)}
+  .item .stat{margin-top:6px;font-size:13px}
+  .item .stat .ok{color:var(--ok)} .item .stat .ng{color:var(--warn)}
+  .player{margin-top:10px;cursor:default}
+  audio{width:100%}
+  .empty{text-align:center;color:var(--sub);padding:40px 0}
+  .recbox{text-align:center}
+  .recbtn{width:120px;height:120px;border-radius:50%;border:0;background:var(--rec);color:#fff;font-size:17px;
+    font-weight:bold;cursor:pointer;box-shadow:0 4px 12px rgba(229,57,53,.35)}
+  .recbtn.stop{background:#333;animation:pulse 1.2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(229,57,53,.6)}100%{box-shadow:0 0 0 18px rgba(229,57,53,0)}}
+  .timer{font-size:22px;margin:12px 0 4px;font-variant-numeric:tabular-nums}
+  .hint{font-size:12px;color:var(--sub)}
+  .btn{display:inline-block;padding:10px 16px;border-radius:8px;border:0;background:var(--main);color:#fff;
+    font-size:15px;cursor:pointer;text-decoration:none}
+  .btn.sub{background:var(--main-soft);color:var(--main)}
+  .btn.big{width:100%;padding:14px;font-size:17px;font-weight:bold}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;justify-content:center}
+  input[type=text]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:16px}
+  .chk{display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+  .chk input{width:20px;height:20px}
+  .chk.all{font-weight:bold;border-bottom:0}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+  .chip input{display:none}
+  .chip span{display:inline-block;padding:6px 12px;border-radius:16px;border:1px solid var(--line);font-size:14px;cursor:pointer}
+  .chip input:checked + span{background:var(--main);color:#fff;border-color:var(--main)}
+  .p-list{max-height:260px;overflow-y:auto;margin-top:6px}
+  .p-list.off{opacity:.4;pointer-events:none}
+  .p-count{margin-top:8px;font-size:14px;color:var(--main);font-weight:bold}
+  .fallback{margin-top:14px;font-size:13px}
+  .fallback label{color:var(--main);text-decoration:underline;cursor:pointer}
+  .msg{color:var(--warn);font-size:13px;margin-top:8px}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:20}
+  .modal.on{display:flex}
+  .modal .sheet{background:#fff;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;border-radius:16px 16px 0 0;padding:20px 16px}
+  .modal h3{margin:0 0 12px}
+  #login{position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;z-index:25;padding:16px}
+  #login.on{display:flex}
+  #login .box{background:#fff;border-radius:16px;padding:32px 24px;text-align:center;max-width:420px;width:100%;
+    box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  #login h2{color:var(--main);font-size:20px;margin:0 0 12px}
+  #busy{position:fixed;inset:0;background:rgba(255,255,255,.7);display:none;align-items:center;justify-content:center;z-index:30;font-size:16px}
+  #busy.on{display:flex}
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#333;color:#fff;padding:10px 18px;
+    border-radius:20px;font-size:14px;display:none;z-index:40}
+  .tools{display:flex;justify-content:flex-end;margin-bottom:8px}
+  .link{background:none;border:0;color:var(--main);font-size:14px;cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <h1>社内ボイスメール</h1>
+  <button class="me" id="meName" onclick="openName()"></button>
+</header>
+<nav>
+  <button data-tab="inbox" class="on" onclick="showTab('inbox')">受信<span id="badge" class="badge" style="display:none"></span></button>
+  <button data-tab="send" onclick="showTab('send')">録音して送る</button>
+  <button data-tab="sent" onclick="showTab('sent')">送信済み</button>
+</nav>
+
+<main>
+  <!-- 受信 -->
+  <section id="view-inbox" class="view on">
+    <div class="tools"><button class="link" onclick="refresh()">↻ 更新</button></div>
+    <div id="inboxList"></div>
+  </section>
+
+  <!-- 録音して送る -->
+  <section id="view-send" class="view">
+    <div class="card recbox">
+      <h2>① 録音する</h2>
+      <div id="recArea">
+        <button id="recBtn" class="recbtn" onclick="toggleRec()">● 録音</button>
+        <div class="timer" id="timer">0:00</div>
+        <div class="hint">最長5分まで録音できます</div>
+      </div>
+      <div id="preview" style="display:none">
+        <audio id="previewAudio" controls></audio>
+        <div class="row"><button class="btn sub" onclick="resetRecorder()">録り直す</button></div>
+      </div>
+      <div id="recMsg" class="msg"></div>
+      <div class="fallback">
+        録音ボタンが使えない場合：
+        <label for="fileIn">スマホの録音アプリ／音声ファイルから選ぶ</label>
+        <input id="fileIn" type="file" accept="audio/*" style="display:none" onchange="pickFile(this)">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>② 件名（任意）</h2>
+      <input type="text" id="title" maxlength="50" placeholder="例：明日の朝礼について">
+    </div>
+
+    <div class="card">
+      <h2>③ 宛先</h2>
+      <div id="sendPicker"></div>
+    </div>
+
+    <button class="btn big" onclick="send()">送信する</button>
+  </section>
+
+  <!-- 送信済み -->
+  <section id="view-sent" class="view">
+    <div class="tools"><button class="link" onclick="refresh()">↻ 更新</button></div>
+    <div id="sentList"></div>
+  </section>
+</main>
+
+<!-- ログイン -->
+<div id="login">
+  <div class="box">
+    <h2>社内ボイスメール</h2>
+    <p>会社のGoogleアカウントでログインしてください。</p>
+    <p><a class="btn big" id="loginBtn" href="#">ログインする</a></p>
+    <p class="hint">一度ログインすると、30日間はそのまま使えます。</p>
+  </div>
+</div>
+
+<!-- 名前登録 -->
+<div class="modal" id="nameModal">
+  <div class="sheet">
+    <h3>表示名の登録</h3>
+    <p class="hint">送信相手に表示される名前です（例：山田 太郎）</p>
+    <input type="text" id="nameIn" maxlength="30">
+    <div class="row"><button class="btn big" onclick="saveName()">登録する</button></div>
+  </div>
+</div>
+
+<!-- 転送 -->
+<div class="modal" id="fwdModal">
+  <div class="sheet">
+    <h3>転送する</h3>
+    <div id="fwdPicker"></div>
+    <div class="row">
+      <button class="btn sub" onclick="closeFwd()">やめる</button>
+      <button class="btn" onclick="doForward()">転送する</button>
+    </div>
+  </div>
+</div>
+
+<div id="busy"><div id="busyText">読み込み中…</div></div>
+<div id="toast"></div>
+
+<script>
+var S = null;              // サーバーから受け取った状態
+var sendPicker = null, fwdPicker = null, fwdId = null;
+var audioUrls = {};        // 読み込み済み音声
+var MAX_SEC = 300;
+var MAX_BYTES = 15 * 1024 * 1024;
+var TOKEN_KEY = 'vm_token';
+var memToken = '';
+
+/* ---------- 共通 ---------- */
+function $(s){ return document.querySelector(s); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function errMsg(e){ return (e && e.message) ? e.message : String(e); }
+function busy(text){ $('#busyText').textContent = text || ''; $('#busy').classList.toggle('on', !!text); }
+var toastTimer;
+function toast(t){ var el = $('#toast'); el.textContent = t; el.style.display = 'block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ el.style.display = 'none'; }, 3000); }
+function mmss(sec){ sec = Math.max(0, Math.round(sec || 0)); return Math.floor(sec/60) + ':' + ('0' + sec % 60).slice(-2); }
+
+/* ---------- ログイン証の保管 ---------- */
+function getToken(){ try { return localStorage.getItem(TOKEN_KEY) || memToken; } catch(e){ return memToken; } }
+function setToken(t){ memToken = t; try { localStorage.setItem(TOKEN_KEY, t); } catch(e){} }
+function clearToken(){ memToken = ''; try { localStorage.removeItem(TOKEN_KEY); } catch(e){} }
+function showLogin(){ $('#loginBtn').href = LOGIN_URL; $('#login').classList.add('on'); busy(false); }
+
+// ログイン用ページから戻ってきたとき（URLの #t=... にログイン証が付いている）
+(function(){
+  var m = location.hash.match(/[#&]t=([^&]+)/);
+  if (m) {
+    setToken(decodeURIComponent(m[1]));
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+})();
+
+/* ---------- サーバーとの通信 ---------- */
+function api(action, data){
+  var token = getToken();
+  if (!token) { showLogin(); var e0 = new Error('ログインしてください。'); e0.auth = true; return Promise.reject(e0); }
+  return fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify({action: action, token: token, data: data || {}})   // text/plain で送る（Apps Script の仕様に合わせる）
+  }).catch(function(){
+    throw new Error('サーバーに接続できませんでした。電波の状態を確認するか、管理者に連絡してください。');
+  }).then(function(r){
+    if (!r.ok) throw new Error('通信エラー（' + r.status + '）');
+    return r.json().catch(function(){ throw new Error('サーバーの応答が正しくありません。管理者に連絡してください。'); });
+  }).then(function(j){
+    if (j.ok) return j.result;
+    var e = new Error(j.error); e.auth = j.auth;
+    if (j.auth) { clearToken(); showLogin(); }
+    throw e;
+  });
+}
+function fail(e){ if (!(e && e.auth)) alert(errMsg(e)); }
+
+/* ---------- 起動 ---------- */
+function start(){
+  if (API_URL.indexOf('XXXXXXXX') >= 0) { alert('管理者の方へ：index.html の API_URL と LOGIN_URL を設定してください。'); return; }
+  if (!getToken()) { showLogin(); return; }
+  busy('読み込み中…');
+  api('init').then(applyInit).catch(fail).then(function(){ busy(false); });
+}
+function applyInit(d){
+  S = d;
+  $('#login').classList.remove('on');
+  $('#meName').textContent = d.me.registered ? d.me.name + ' さん' : '名前未登録';
+  sendPicker = makePicker($('#sendPicker'));
+  fwdPicker = makePicker($('#fwdPicker'));
+  renderLists();
+  if (!d.me.registered) openName();
+}
+function applyLists(d){ S.inbox = d.inbox; S.sent = d.sent; renderLists(); }
+function refresh(){
+  return api('lists').then(applyLists).catch(function(e){ if (!e.auth) toast(errMsg(e)); });
+}
+function showTab(name){
+  document.querySelectorAll('nav button').forEach(function(b){ b.classList.toggle('on', b.dataset.tab === name); });
+  document.querySelectorAll('.view').forEach(function(v){ v.classList.toggle('on', v.id === 'view-' + name); });
+  window.scrollTo(0, 0);
+}
+// 画面に戻ってきたときと、3分おきに新着を確認
+document.addEventListener('visibilitychange', function(){ if (!document.hidden && S) refresh(); });
+setInterval(function(){ if (!document.hidden && S) refresh(); }, 180000);
+
+/* ---------- 名前 ---------- */
+function openName(){ $('#nameIn').value = (S && S.me.name) || ''; $('#nameModal').classList.add('on'); $('#nameIn').focus(); }
+function saveName(){
+  var n = $('#nameIn').value.trim();
+  if (!n) { toast('名前を入力してください'); return; }
+  busy('登録中…');
+  api('register', {name: n}).then(function(d){ $('#nameModal').classList.remove('on'); applyInit(d); toast('登録しました'); })
+    .catch(fail).then(function(){ busy(false); });
+}
+
+/* ---------- 一覧 ---------- */
+function updateBadge(){
+  var unread = S.inbox.filter(function(m){ return !m.read; }).length;
+  var b = $('#badge'); b.textContent = unread; b.style.display = unread ? 'inline-block' : 'none';
+}
+function renderLists(){
+  updateBadge();
+  $('#inboxList').innerHTML = S.inbox.length ? S.inbox.map(function(m){
+    return '<div class="item' + (m.read ? '' : ' unread') + '" data-id="' + esc(m.id) + '" onclick="openItem(this)">' +
+      '<div class="top"><span class="who">' + esc(m.from) + '</span><span class="meta">' + esc(m.at) + '・' + mmss(m.sec) + '</span></div>' +
+      '<div class="ttl">' + (m.fwd ? '↪ ' : '') + esc(m.title) + '</div>' +
+      '<div class="player" onclick="event.stopPropagation()"></div></div>';
+  }).join('') : '<div class="empty">受信したボイスメールはありません</div>';
+
+  $('#sentList').innerHTML = S.sent.length ? S.sent.map(function(m){
+    var all = m.read === m.total;
+    var stat = all ? '<span class="ok">全員既読（' + m.total + '名）</span>'
+      : '<span class="ng">既読 ' + m.read + ' / ' + m.total + '名</span>' +
+        '<div class="hint">未読：' + esc(m.unread.slice(0, 20).join('、')) + (m.unread.length > 20 ? ' ほか' : '') + '</div>';
+    return '<div class="item" data-id="' + esc(m.id) + '" data-sent="1" onclick="openItem(this)">' +
+      '<div class="top"><span class="who">' + esc(m.title) + '</span><span class="meta">' + esc(m.at) + '・' + mmss(m.sec) + '</span></div>' +
+      '<div class="stat">' + stat + '</div>' +
+      '<div class="player" onclick="event.stopPropagation()"></div></div>';
+  }).join('') : '<div class="empty">送信したボイスメールはありません</div>';
+}
+
+function openItem(el){
+  var id = el.dataset.id, box = el.querySelector('.player');
+  if (box.innerHTML) { box.innerHTML = ''; return; }   // もう一度押したら閉じる
+  var show = function(url){
+    box.innerHTML = '<audio controls src="' + url + '"></audio>' +
+      '<div class="row"><button class="btn sub" onclick="openFwd(\'' + esc(id) + '\')">転送する</button></div>';
+    var p = box.querySelector('audio').play(); if (p && p.catch) p.catch(function(){});
+  };
+  if (audioUrls[id]) { show(audioUrls[id]); return; }
+  box.innerHTML = '<div class="hint">読み込み中…</div>';
+  api('audio', {id: id}).then(function(r){
+    audioUrls[id] = URL.createObjectURL(b64ToBlob(r.base64, r.mimeType));
+    show(audioUrls[id]);
+    if (!el.dataset.sent) {
+      S.inbox.forEach(function(m){ if (m.id === id) m.read = true; });
+      el.classList.remove('unread');
+      updateBadge();
+    }
+  }).catch(function(e){ box.innerHTML = '<div class="msg">' + esc(errMsg(e)) + '</div>'; });
+}
+
+function b64ToBlob(b64, type){
+  var bin = atob(b64), len = bin.length, arr = new Uint8Array(len);
+  for (var i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], {type: type});
+}
+function blobToB64(blob){
+  return new Promise(function(res, rej){
+    var fr = new FileReader();
+    fr.onload = function(){ res(String(fr.result).split(',')[1] || ''); };
+    fr.onerror = rej;
+    fr.readAsDataURL(blob);
+  });
+}
+
+/* ---------- 宛先の選択 ---------- */
+function makePicker(root){
+  var me = S.me.email;
+  var others = S.users.filter(function(u){ return u.email !== me; });
+  root.innerHTML =
+    '<label class="chk all"><input type="checkbox" class="p-all"> 全員（' + others.length + '名）</label>' +
+    (S.groups.length ? '<div class="chips">' + S.groups.map(function(g){
+      return '<label class="chip"><input type="checkbox" class="p-grp" value="' + esc(g) + '"><span>' + esc(g) + '</span></label>';
+    }).join('') + '</div>' : '') +
+    '<input type="text" class="p-search" placeholder="名前で絞り込み">' +
+    '<div class="p-list">' + (others.length ? others.map(function(u){
+      return '<label class="chk" data-name="' + esc(u.name.toLowerCase()) + '"><input type="checkbox" class="p-user" value="' + esc(u.email) + '"> ' + esc(u.name) + '</label>';
+    }).join('') : '<div class="hint">まだ他の利用者が登録していません</div>') + '</div>' +
+    '<div class="p-count"></div>';
+
+  function get(){
+    return {
+      toAll: root.querySelector('.p-all').checked,
+      toGroups: Array.prototype.map.call(root.querySelectorAll('.p-grp:checked'), function(i){ return i.value; }),
+      to: Array.prototype.map.call(root.querySelectorAll('.p-user:checked'), function(i){ return i.value; })
+    };
+  }
+  function count(){
+    var v = get(), set = {};
+    others.forEach(function(u){
+      if (v.toAll || v.to.indexOf(u.email) >= 0 ||
+          (u.groups || []).some(function(g){ return v.toGroups.indexOf(g) >= 0; })) set[u.email] = true;
+    });
+    var n = Object.keys(set).length;
+    root.querySelector('.p-list').classList.toggle('off', v.toAll);
+    root.querySelector('.p-count').textContent = n ? '宛先：' + n + '名' : '';
+    return n;
+  }
+  root.onchange = count;
+  root.querySelector('.p-search').addEventListener('input', function(){
+    var q = this.value.trim().toLowerCase();
+    root.querySelectorAll('.p-list .chk').forEach(function(l){ l.style.display = !q || l.dataset.name.indexOf(q) >= 0 ? '' : 'none'; });
+  });
+  return {
+    get: get, count: count,
+    reset: function(){ root.querySelectorAll('input[type=checkbox]').forEach(function(i){ i.checked = false; });
+      root.querySelector('.p-search').value = ''; root.querySelectorAll('.p-list .chk').forEach(function(l){ l.style.display = ''; }); count(); }
+  };
+}
+
+/* ---------- 録音 ---------- */
+var rec = null, stream = null, chunks = [], recBlob = null, recSec = 0, startAt = 0, tick = null;
+
+function pickMime(){
+  var c = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+  for (var i = 0; i < c.length; i++) if (MediaRecorder.isTypeSupported(c[i])) return c[i];
+  return '';
+}
+function toggleRec(){ if (rec && rec.state === 'recording') stopRec(); else startRec(); }
+
+function startRec(){
+  $('#recMsg').textContent = '';
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+    $('#recMsg').textContent = 'このブラウザでは録音できません。Safari（iPhone）か Chrome（Android・パソコン）で開いてください。';
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({audio: true}).then(function(s){
+    stream = s;
+    var mime = pickMime();
+    var opt = {audioBitsPerSecond: 48000};
+    if (mime) opt.mimeType = mime;
+    rec = new MediaRecorder(stream, opt);
+    chunks = [];
+    rec.ondataavailable = function(e){ if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = function(){
+      stream.getTracks().forEach(function(t){ t.stop(); });
+      recSec = (Date.now() - startAt) / 1000;
+      recBlob = new Blob(chunks, {type: (rec.mimeType || mime || 'audio/webm').split(';')[0]});
+      showPreview();
+    };
+    rec.start(1000);
+    startAt = Date.now();
+    $('#recBtn').classList.add('stop'); $('#recBtn').textContent = '■ 停止';
+    tick = setInterval(function(){
+      var sec = (Date.now() - startAt) / 1000;
+      $('#timer').textContent = mmss(sec) + ' / ' + mmss(MAX_SEC);
+      if (sec >= MAX_SEC) stopRec();
+    }, 250);
+  }).catch(function(e){
+    $('#recMsg').textContent = 'マイクを使えませんでした（' + (e.name || e) + '）。マイクの使用を「許可」にしてから、もう一度押してください。';
+  });
+}
+function stopRec(){
+  clearInterval(tick);
+  if (rec && rec.state === 'recording') rec.stop();
+  $('#recBtn').classList.remove('stop'); $('#recBtn').textContent = '● 録音';
+}
+function showPreview(){
+  $('#previewAudio').src = URL.createObjectURL(recBlob);
+  $('#recArea').style.display = 'none';
+  $('#preview').style.display = 'block';
+}
+function resetRecorder(){
+  stopRec();
+  recBlob = null; recSec = 0; chunks = [];
+  $('#previewAudio').removeAttribute('src');
+  $('#preview').style.display = 'none';
+  $('#recArea').style.display = 'block';
+  $('#timer').textContent = '0:00';
+  $('#fileIn').value = '';
+  $('#recMsg').textContent = '';
+}
+function pickFile(input){
+  var f = input.files && input.files[0];
+  if (!f) return;
+  if (f.size > MAX_BYTES) { $('#recMsg').textContent = 'ファイルが大きすぎます（15MBまで）。'; input.value = ''; return; }
+  recBlob = f.type ? f : new Blob([f], {type: 'audio/mp4'});
+  recSec = 0;
+  var a = new Audio(); a.preload = 'metadata';
+  a.onloadedmetadata = function(){ if (isFinite(a.duration)) recSec = a.duration; };
+  a.src = URL.createObjectURL(recBlob);
+  showPreview();
+}
+
+/* ---------- 送信 ---------- */
+function send(){
+  if (rec && rec.state === 'recording') { toast('先に録音を停止してください'); return; }
+  if (!recBlob) { toast('先に録音してください'); return; }
+  if (!S.me.registered) { openName(); return; }
+  if (!sendPicker.count()) { toast('宛先を選んでください'); return; }
+  if (recBlob.size > MAX_BYTES) { toast('録音が大きすぎます（15MBまで）'); return; }
+  var spec = sendPicker.get();
+  busy('送信中…');
+  blobToB64(recBlob).then(function(b64){
+    spec.base64 = b64;
+    spec.mimeType = recBlob.type || 'audio/webm';
+    spec.durationSec = recSec;
+    spec.title = $('#title').value;
+    return api('send', spec);
+  }).then(function(r){
+    applyLists(r);
+    toast(r.count + '名に送信しました' + (r.mailed < r.count ? '（通知メールは' + r.mailed + '名のみ）' : ''));
+    resetRecorder(); sendPicker.reset(); $('#title').value = '';
+    showTab('sent');
+  }).catch(fail).then(function(){ busy(false); });
+}
+
+/* ---------- 転送 ---------- */
+function openFwd(id){ fwdId = id; fwdPicker.reset(); $('#fwdModal').classList.add('on'); }
+function closeFwd(){ $('#fwdModal').classList.remove('on'); fwdId = null; }
+function doForward(){
+  if (!fwdPicker.count()) { toast('宛先を選んでください'); return; }
+  busy('転送中…');
+  api('forward', {id: fwdId, spec: fwdPicker.get()}).then(function(r){
+    applyLists(r); closeFwd(); toast(r.count + '名に転送しました');
+  }).catch(fail).then(function(){ busy(false); });
+}
+
+start();
+</script>
+</body>
+</html>
